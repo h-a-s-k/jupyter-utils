@@ -1,3 +1,9 @@
+*.bak
+*.old
+old/
+testing/
+bak/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
@@ -33,6 +39,7 @@ MANIFEST
 *.spec
 
 # Installer logs
+logs/
 pip-log.txt
 pip-delete-this-directory.txt
 
