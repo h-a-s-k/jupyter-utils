@@ -30,6 +30,7 @@ sys.path.insert(0, os.path.join(os.getcwd(), 'jupyter-utils'))
 
 from helpers import create_uv_kernel, cleanup_session, pip, bash, get_venv_root, remove_kernel
 from gpu_monitor import SystemMonitor, monitor
+from training_callbacks import EarlyStoppingCallback, TimeLimitCallback, TrainingLoggerCallback
 ```
 
 ## Usage
@@ -169,6 +170,43 @@ mon.stop()
 ```
 
 Monitors GPU (rocm-smi/nvidia-smi/amd-smi), CPU, RAM, and disk. Runs in background thread.
+
+### Training callbacks
+
+```python
+from training_callbacks import EarlyStoppingCallback, TimeLimitCallback, TrainingLoggerCallback
+
+# Early stopping - stops if loss doesn't improve
+early_stop = EarlyStoppingCallback(
+    patience=50,                           # Steps to wait without improvement
+    min_delta=0.01,                        # Minimum change to count as improvement
+    metric_name="eval_assistant_accuracy", # Explicitly track a custom loss metric
+	greater_is_better=True,                # Accuracy/Loss
+    stop_file_dir=".",                     # Directory to check for manual STOP file
+    verbose=False                          # Print progress messages
+)
+
+# Time limit - stops after specified hours
+time_limit = TimeLimitCallback(max_hours=3.0)
+
+# Training logger - saves metrics to text and JSON
+logger = TrainingLoggerCallback(
+    base_path="./logs",
+    extra_config={"max_seq_length": 2048, "lora_r": 16}  # Optional
+)
+
+# Use with trainer
+trainer = SFTTrainer(
+    model=model,
+    tokenizer=tokenizer,
+    train_dataset=dataset,
+    eval_dataset=None,
+    args=SFTConfig(...),
+    callbacks=[early_stop, time_limit, logger]
+)
+```
+
+EarlyStoppingCallback stops when loss plateaus or you create a STOP file in the working directory. TimeLimitCallback stops after a time limit. TrainingLoggerCallback logs everything to text and JSON files.
 
 ## Example
 

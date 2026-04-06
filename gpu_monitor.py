@@ -81,6 +81,66 @@ class SystemMonitor:
         
         return (None, None)
     
+    def _parse_rocm_output(self, output):
+        """Parse rocm-smi output into a clean format."""
+        lines = output.strip().split('\n')
+        gpu_data = {}
+        
+        for line in lines:
+            if 'GPU use (%)' in line:
+                parts = line.split(':')
+                if len(parts) >= 2:
+                    gpu_data['usage'] = parts[-1].strip()
+            elif 'VRAM Total Memory (B)' in line:
+                parts = line.split(':')
+                if len(parts) >= 2:
+                    total_bytes = int(parts[-1].strip())
+                    gpu_data['vram_total'] = total_bytes / (1024**3)  # Convert to GB
+            elif 'VRAM Total Used Memory (B)' in line:
+                parts = line.split(':')
+                if len(parts) >= 2:
+                    used_bytes = int(parts[-1].strip())
+                    gpu_data['vram_used'] = used_bytes / (1024**3)  # Convert to GB
+        
+        if not gpu_data:
+            return None
+        
+        # Calculate VRAM percentage
+        vram_percent = 0
+        if 'vram_total' in gpu_data and 'vram_used' in gpu_data and gpu_data['vram_total'] > 0:
+            vram_percent = (gpu_data['vram_used'] / gpu_data['vram_total']) * 100
+        
+        # Create progress bars
+        bar_width = 30
+        
+        # GPU usage bar
+        usage = int(gpu_data.get('usage', 0))
+        usage_filled = int(bar_width * usage / 100)
+        usage_bar = '█' * usage_filled + '░' * (bar_width - usage_filled)
+        usage_color = '#4a4' if usage < 70 else '#fa0' if usage < 90 else '#f44'
+        
+        # VRAM bar
+        vram_filled = int(bar_width * vram_percent / 100)
+        vram_bar = '█' * vram_filled + '░' * (bar_width - vram_filled)
+        vram_color = '#4a4' if vram_percent < 70 else '#fa0' if vram_percent < 90 else '#f44'
+        
+        html = f"""
+        <div style='margin-bottom: 10px;'>
+            <strong>GPU Usage:</strong> {usage}%
+            <div style='font-family: monospace; color: {usage_color};'>{usage_bar} {usage}%</div>
+        </div>
+        """
+        
+        if 'vram_total' in gpu_data and 'vram_used' in gpu_data:
+            html += f"""
+        <div style='margin-bottom: 10px;'>
+            <strong>VRAM:</strong> {gpu_data['vram_used']:.1f} GB / {gpu_data['vram_total']:.1f} GB ({vram_percent:.1f}%)
+            <div style='font-family: monospace; color: {vram_color};'>{vram_bar} {vram_percent:.1f}%</div>
+        </div>
+        """
+        
+        return html
+    
     def _get_gpu_info(self):
         """Get GPU information."""
         if not self.gpu_cmd[0]:
@@ -96,9 +156,16 @@ class SystemMonitor:
             
             if result.returncode == 0:
                 output = result.stdout.strip()
-                # Escape HTML and preserve formatting
+                
+                # Parse ROCm output nicely
+                if self.gpu_cmd[0] == 'rocm-smi':
+                    parsed = self._parse_rocm_output(output)
+                    if parsed:
+                        return parsed
+                
+                # For nvidia-smi or unparseable output, show raw output
                 output = output.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
-                return f"<pre style='margin: 0; font-size: 11px;'>{output}</pre>"
+                return f"<pre style='margin: 0; font-size: 11px; line-height: 1.3;'>{output}</pre>"
             else:
                 return f"<div style='color: #f44;'>GPU command failed</div>"
         except subprocess.TimeoutExpired:
@@ -200,8 +267,8 @@ class SystemMonitor:
             {disk_info}
             
             <div style='margin-top: 15px;'>
-                <strong>GPU Info ({self.gpu_cmd[0] or 'N/A'}):</strong>
-                <div style='margin-top: 5px; background: #fff; padding: 10px; border-radius: 3px; overflow-x: auto;'>
+                <div style='margin-bottom: 5px;'><strong>GPU ({self.gpu_cmd[0] or 'N/A'}):</strong></div>
+                <div style='background: #fff; padding: 10px; border-radius: 3px; overflow-x: auto;'>
                     {gpu_info}
                 </div>
             </div>
